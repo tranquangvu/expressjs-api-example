@@ -2,9 +2,6 @@ const mongoose = require('mongoose');
 const logger = require('./logger');
 const { mongo, env } = require('./vars');
 
-// set mongoose Promise to Bluebird
-mongoose.Promise = Promise;
-
 // Exit application on error
 mongoose.connection.on('error', (err) => {
   logger.error(`MongoDB connection error: ${err}`);

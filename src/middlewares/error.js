@@ -1,12 +1,10 @@
 const httpStatus = require('http-status');
-const expressValidation = require('express-validation');
-const APIError = require('../utils/APIError');
+const { entries, assign } = require('lodash');
+const { ValidationError: ExpressValidationError } = require('express-validation');
+const { Error: { ValidationError: MongooseValidationError } } = require('mongoose');
 const { env } = require('../config/vars');
+const APIError = require('../utils/APIError');
 
-/**
- * Error handler. Send stacktrace only during development
- * @public
- */
 const handler = (err, req, res, next) => {
   const response = {
     code: err.status,
@@ -24,19 +22,27 @@ const handler = (err, req, res, next) => {
 };
 exports.handler = handler;
 
-/**
- * If error is not an instanceOf APIError, convert it.
- * @public
- */
 exports.converter = (err, req, res, next) => {
   let convertedError = err;
 
-  if (err instanceof expressValidation.ValidationError) {
+  if (err instanceof ExpressValidationError) {
     convertedError = new APIError({
       message: 'Validation Error',
-      errors: err.errors,
-      status: err.status,
-      stack: err.stack,
+      errors: err.details,
+      status: err.statusCode,
+    });
+  } else if (err instanceof MongooseValidationError) {
+    convertedError = new APIError({
+      message: 'Validation Error',
+      errors: entries(err.errors)
+        .reduce((result, [key, validatorError]) => {
+          const validatorErrorJSON = validatorError.toJSON();
+
+          return assign({}, result, {
+            [key]: validatorErrorJSON.message,
+          });
+        }, {}),
+      status: httpStatus.UNPROCESSABLE_ENTITY,
     });
   } else if (!(err instanceof APIError)) {
     convertedError = new APIError({
@@ -49,10 +55,6 @@ exports.converter = (err, req, res, next) => {
   return handler(convertedError, req, res);
 };
 
-/**
- * Catch 404 and forward to error handler
- * @public
- */
 exports.notFound = (req, res, next) => {
   const err = new APIError({
     message: 'Not found',
